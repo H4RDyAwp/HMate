@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HMate - Игровое Поле</title>
+    <link rel="stylesheet" href="/static/glass.css">
+    <style>
+        .game-layout {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            max-width: 440px;
+        }
+
+        .player-bar {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .timer-box {
+            font-family: monospace;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .board-container {
+            width: 100%;
+            aspect-ratio: 1;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            position: relative;
+            touch-action: none;
+            user-select: none;
+        }
+
+        .square {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .light {
+            background: #eeeed2;
+        }
+
+        .dark {
+            background: #739552;
+        }
+
+        .square.selected::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(20, 85, 30, 0.5);
+            pointer-events: none;
+        }
+
+        .square.hint::after {
+            content: '';
+            position: absolute;
+            width: 25%;
+            height: 25%;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .square.hint.has-piece::after {
+            width: 85%;
+            height: 85%;
+            background: transparent;
+            border: 4px solid rgba(0, 0, 0, 0.25);
+            border-radius: 50%;
+        }
+
+        .piece {
+            width: 100%;
+            height: 100%;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            z-index: 2;
+            cursor: grab;
+            position: absolute;
+            touch-action: none;
+        }
+        .square.best-move {
+    box-shadow: inset 0 0 0 4px #00ff00 !important;
+    background: rgba(0, 255, 0, 0.3) !important;
+}
+
+        .piece.dragging {
+            cursor: grabbing;
+            z-index: 10000;
+            pointer-events: none;
+        }
+
+        .controls {
+            width: 100%;
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            justify-content: center;
+            align-items: center;
+            z-index: 20000;
+            padding: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="game-layout">
+        <div class="player-bar">
+            <span id="top-player-name">Соперник</span>
+            <span class="timer-box" id="top-timer">03:00</span>
+        </div>
+
+        <div class="board-container" id="chessboard"></div>
+
+        <div class="player-bar">
+            <span id="bottom-player-name">Вы</span>
+            <span class="timer-box" id="bottom-timer">03:00</span>
+        </div>
+
+        <div class="controls">
+            <button class="glass-btn" id="hint-btn" style="flex:1; background:#b58863;" onclick="toggleHint()">💡
+                Подсказка</button>
+            <button class="glass-btn" style="flex:1; background:#a83232;" onclick="resignGame()">Сдаться</button>
+            <button class="glass-btn" style="flex:1;" onclick="goToDashboard()">В меню</button>
+        </div>
+    </div>
+
+    <div id="modal" class="modal">
+        <div class="glass-panel" style="text-align:center; display:flex; flex-direction:column; gap:12px;">
+            <h2 id="modal-title" style="margin:0;">Партия завершена</h2>
+            <div id="elo-change-box" style="font-size: 20px; font-weight: bold;"></div>
+            <button class="glass-btn" onclick="window.location.href=`/analysis/${gameId}`">Анализ партии</button>
+            <button class="glass-btn" onclick="goToDashboard()">В меню</button>
+        </div>
+    </div>
+
+    <script>
+        let hintActive = false;
+        const uid = parseInt(localStorage.getItem('user_id'));
+        const gameId = window.location.pathname.split('/')[2];
+        const boardEl = document.getElementById('chessboard');
+
+        let gameState = null, currentFen = "", legalMoves = [], selectedSquare = null;
+        let myColor = 'white', timerPoll = null, lastMoveCount = 0;
+
+        const sounds = {
+            move: new Audio('https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/move-self.mp3'),
+            end: new Audio('https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/game-end.mp3')
+        };
+        const pieceImages = {
+            'r': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/br.png',
+            'n': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bn.png',
+            'b': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bb.png',
+            'q': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bq.png',
+            'k': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bk.png',
+            'p': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bp.png',
+            'R': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wr.png',
+            'N': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wn.png',
+            'B': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wb.png',
+            'Q': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wq.png',
+            'K': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wk.png',
+            'P': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wp.png'
+        };
+
+        const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+        const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+
+        function fmtTime(sec) {
+            sec = Math.max(0, Math.floor(sec));
+            const m = Math.floor(sec / 60).toString().padStart(2, '0');
+            const s = (sec % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        async function init() {
+            await loadState(true);
+            timerPoll = setInterval(() => loadState(false), 1500);
+        }
+
+        async function goToDashboard() {
+            try { await fetch(`/api/games/leave/${gameId}`, { method: 'POST' }); } catch (e) { }
+            window.location.href = '/dashboard';
+        }
+
+        function createBoard() {
+            boardEl.innerHTML = '';
+            const fList = myColor === 'black' ? [...files].reverse() : files;
+            const rList = myColor === 'black' ? [...ranks].reverse() : ranks;
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const sq = document.createElement('div');
+                    sq.classList.add('square', (r + c) % 2 === 0 ? 'light' : 'dark');
+                    sq.id = `sq-${fList[c]}${rList[r]}`;
+                    sq.dataset.sq = `${fList[c]}${rList[r]}`;
+                    boardEl.appendChild(sq);
+                }
+            }
+        }
+
+        async function loadState(forceRebuild = false) {
+                const res = await fetch(`/api/games/${gameId}`);
+                if (!res.ok) return;
+                const newState = await res.json();
+
+                // Сразу вычисляем цвет по ID
+                if (newState.game_mode === 'mm') {
+                    myColor = (newState.black_id === uid) ? 'black' : 'white';
+                } else {
+                    myColor = newState.player_color || 'white';
+                }
+
+                if (forceRebuild || !boardEl.hasChildNodes() || window.lastAssignedColor !== myColor) {
+                    window.lastAssignedColor = myColor;
+                    createBoard();
+                }
+
+                if (myColor === 'white') {
+                    document.getElementById('bottom-player-name').innerText = newState.white_name;
+                    document.getElementById('top-player-name').innerText = newState.black_name;
+                    document.getElementById('bottom-timer').innerText = fmtTime(newState.white_time);
+                    document.getElementById('top-timer').innerText = fmtTime(newState.black_time);
+                } else {
+                    document.getElementById('bottom-player-name').innerText = newState.black_name;
+                    document.getElementById('top-player-name').innerText = newState.white_name;
+                    document.getElementById('bottom-timer').innerText = fmtTime(newState.black_time);
+                    document.getElementById('top-timer').innerText = fmtTime(newState.white_time);
+                }
+
+                if (forceRebuild || !boardEl.hasChildNodes() || newState.history.length !== lastMoveCount || newState.fen !== currentFen) {
+                    currentFen = newState.fen;
+                    renderBoard(currentFen);
+                    lastMoveCount = newState.history.length;
+                }
+
+                gameState = newState;
+                legalMoves = gameState.legal_moves;
+
+                if (gameState.status !== 'active') {
+                    clearInterval(timerPoll);
+                    showEndModal();
+                }
+            }
+
+        function renderBoard(fen) {
+            document.querySelectorAll('.square').forEach(sq => sq.innerHTML = '');
+            const fenBoard = fen.split(' ')[0];
+            let r = 0, f = 0;
+            for (let char of fenBoard) {
+                if (char === '/') { r++; f = 0; }
+                else if (!isNaN(char)) { f += parseInt(char); }
+                else {
+                    const sqName = files[f] + ranks[r];
+                    const sqEl = document.getElementById(`sq-${sqName}`);
+                    if (sqEl) {
+                        const piece = document.createElement('div');
+                        piece.classList.add('piece');
+                        piece.style.backgroundImage = `url('${pieceImages[char]}')`;
+                        sqEl.appendChild(piece);
+                    }
+                    f++;
+                }
+            }
+        }
+
+        function showEndModal() {
+            sounds.end.play();
+            const status = gameState.status;
+            let title = "Ничья!";
+            if (status === 'white_win') title = "Победа белых!";
+            if (status === 'black_win') title = "Победа черных!";
+            document.getElementById('modal-title').innerText = title;
+
+            const box = document.getElementById('elo-change-box');
+            if (gameState.game_mode === 'mm') {
+                const delta = (myColor === 'white') ? gameState.elo_delta_white : gameState.elo_delta_black;
+                box.innerHTML = delta >= 0
+                    ? `<span style="color:#4cd137;">+${delta} ELO 🎉</span>`
+                    : `<span style="color:#e84118;">${delta} ELO 💀</span>`;
+            } else {
+                box.innerHTML = `<span style="color:#aaa; font-size:14px;">(Игра без ELO)</span>`;
+            }
+
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        async function resignGame() {
+            if (!confirm("Сдаться?")) return;
+            const res = await fetch(`/api/games/${gameId}/resign`, { method: 'POST' });
+            if (res.ok) await loadState(true);
+        }
+        // При загрузке игры проверяем, является ли текущий игрок админом
+            async function checkAdminStatusInGame() {
+                try {
+                    const res = await fetch(`/api/users/${uid}`);
+                    if (res.ok) {
+                        const me = await res.json();
+                        if (me.username === 'administrator') {
+                            const hintBtn = document.getElementById('hint-btn');
+                            hintBtn.style.display = 'block'; // Всегда покажет даже в MM!
+                            hintBtn.style.background = 'linear-gradient(135deg, #8847ff, #431c80)';
+                            hintBtn.innerText = '⚡ Чит: Лучший ход';
+                        }
+                    }
+                } catch (e) { }
+            }
+
+        async function toggleHint() {
+                if (hintActive) {
+                    document.querySelectorAll('.square').forEach(s => s.classList.remove('best-move'));
+                    hintActive = false;
+                    return;
+                }
+
+                // Передаем uid, чтобы бэкенд проверил админ-права
+                const res = await fetch(`/api/games/${gameId}/hint?user_id=${uid}`);
+                if (res.ok) {
+                    const d = await res.json();
+                    const fromSq = d.best_move.substring(0, 2);
+                    const toSq = d.best_move.substring(2, 4);
+
+                    // Подсвечиваем клетки лучшего хода прямо на доске
+                    const fromEl = document.getElementById(`sq-${fromSq}`);
+                    const toEl = document.getElementById(`sq-${toSq}`);
+
+                    if (fromEl) fromEl.classList.add('best-move');
+                    if (toEl) toEl.classList.add('best-move');
+
+                    hintActive = true;
+                } else {
+                    alert('Подсказка недоступна');
+                }
+            }
+
+            // Вызываем проверку статуса админа при инициализации
+            checkAdminStatusInGame();
+
+        let activePiece = null, fromSquare = null, startX = 0, startY = 0, isDragging = false;
+
+        window.addEventListener('pointerdown', e => {
+            // Строгая проверка: запрещаем ходить, если сейчас не твой ход
+            if (gameState.turn !== myColor) return;
+
+            const piece = e.target.closest('.piece');
+            const sq = e.target.closest('.square');
+
+            // Если кликнули на свободное поле с уже выбранной фигурой — пробуем сделать ход
+            if (!piece && selectedSquare && sq) {
+                tryMove(selectedSquare, sq.dataset.sq);
+                return;
+            }
+            if (!piece) {
+                clearSelection();
+                return;
+            }
+
+            activePiece = piece;
+            fromSquare = sq.dataset.sq;
+            startX = e.clientX; startY = e.clientY;
+            isDragging = false;
+            selectSquare(sq);
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+        });
+
+        function selectSquare(sq) {
+            clearSelection();
+            selectedSquare = sq.dataset.sq;
+            sq.classList.add('selected');
+            legalMoves.forEach(m => {
+                if (m.startsWith(selectedSquare)) {
+                    const toEl = document.getElementById(`sq-${m.substring(2, 4)}`);
+                    if (toEl) {
+                        toEl.classList.add('hint');
+                        if (toEl.querySelector('.piece')) toEl.classList.add('has-piece');
+                    }
+                }
+            });
+        }
+
+        function clearSelection() {
+            selectedSquare = null;
+            document.querySelectorAll('.square').forEach(sq => sq.classList.remove('selected', 'hint', 'has-piece'));
+        }
+
+        function onMove(e) {
+            if (!activePiece) return;
+            const dx = e.clientX - startX, dy = e.clientY - startY;
+            if (Math.hypot(dx, dy) > 3 && !isDragging) { isDragging = true; activePiece.classList.add('dragging'); }
+            if (isDragging) activePiece.style.transform = `translate(${dx}px, ${dy}px)`;
+        }
+
+        async function onUp(e) {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+            if (!activePiece) return;
+            let targetSq = null;
+            if (isDragging) {
+                activePiece.classList.remove('dragging');
+                activePiece.style.transform = '';
+                activePiece.style.display = 'none';
+                const below = document.elementFromPoint(e.clientX, e.clientY);
+                activePiece.style.display = 'block';
+                const sqElem = below ? below.closest('.square') : null;
+                if (sqElem) targetSq = sqElem.dataset.sq;
+            }
+            const originSq = fromSquare;
+            activePiece.style.transform = '';
+            activePiece = null; fromSquare = null; isDragging = false;
+
+            if (targetSq && targetSq !== originSq) {
+                clearSelection();
+                await tryMove(originSq, targetSq);
+            } else {
+                // Если бросили на то же место — оставляем выделение
+            }
+        }
+
+        async function tryMove(from, to) {
+            if (gameState.turn !== myColor) return;
+
+            const res = await fetch('/api/games/move', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ game_id: gameId, from_sq: from, to_sq: to })
+            });
+            if (res.ok) {
+                sounds.move.play();
+                clearSelection();
+                await loadState(true);
+                if (gameState.game_mode === 'bot' && gameState.status === 'active') {
+                    await fetch(`/api/games/${gameId}/bot-move`, { method: 'POST' });
+                    await loadState(true);
+                }
+            } else {
+                renderBoard(currentFen);
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>

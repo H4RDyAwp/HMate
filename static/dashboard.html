@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HMate - Меню</title>
+    <link rel="stylesheet" href="/static/glass.css">
+    <style>
+        .panel {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .header-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-box {
+            background: rgba(0, 0, 0, 0.25);
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #d1d5db;
+            text-transform: uppercase;
+        }
+
+        .search-box input,
+        select,
+        input[type="range"] {
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            color: #fff;
+            outline: none;
+            width: 100%;
+        }
+
+        select option {
+            background: #1a1e29;
+        }
+
+        .user-result {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="glass-panel panel">
+        <div class="header-box">
+            <h1 style="margin:0; font-size:24px; cursor:pointer;" onclick="openMyProfile()">HMate ♟️</h1>
+            <div id="user-elo-container"></div>
+        </div>
+
+        <div class="section-box">
+            <span class="section-title">🔍 Найти игрока</span>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Никнейм..." oninput="searchUsers()">
+            </div>
+            <div id="search-results"></div>
+        </div>
+
+        <div class="section-box">
+            <span class="section-title">⚡ Матчмейкинг (Рейтинговый)</span>
+            <div style="display: flex; gap: 6px;">
+                <button class="glass-btn" style="flex:1;" onclick="startMM(60)">1 мин</button>
+                <button class="glass-btn" style="flex:1;" onclick="startMM(180)">3 мин</button>
+                <button class="glass-btn" style="flex:1;" onclick="startMM(300)">5 мин</button>
+            </div>
+            <div id="mm-status" style="display:none; text-align:center; color:#ffcc00; font-size:13px; margin-top:4px;">
+                Поиск... <button onclick="cancelMM()"
+                    style="background:none; border:none; color:#ff6b6b; cursor:pointer; text-decoration:underline;">Отмена</button>
+            </div>
+        </div>
+
+        <div class="section-box">
+            <span class="section-title">⚙️ Тренировка / Кастом</span>
+            <select id="game-mode" onchange="toggleBotSettings()">
+                <option value="pvp">Два игрока (Без ELO)</option>
+                <option value="bot">Игра с Ботом (Без ELO)</option>
+            </select>
+            <div id="bot-settings" style="display:none; flex-direction:column; gap:4px;">
+                <label style="font-size:12px; color:#aaa;">Сложность бота: <span id="elo-val"
+                        style="color:#fff;">1500</span> ELO</label>
+                <input type="range" id="bot-elo" min="400" max="2800" step="100" value="1500"
+                    oninput="document.getElementById('elo-val').innerText=this.value">
+            </div>
+            <select id="player-color">
+                <option value="white">Белые</option>
+                <option value="black">Черные</option>
+            </select>
+            <button class="glass-btn" style="background:rgba(118, 150, 86, 0.4);" onclick="newGame()">Создать</button>
+        </div>
+
+        <div class="section-box">
+            <span class="section-title">📜 История</span>
+            <div id="gamelist" style="max-height:120px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;">
+            </div>
+        </div>
+
+        <button class="glass-btn" style="background:rgba(235,75,75,0.2); color:#ff8888;" onclick="logout()">Выйти из
+            аккаунта</button>
+    </div>
+
+    <script>
+        const uid = localStorage.getItem('user_id');
+        if (!uid) window.location.href = '/';
+
+        function getCS2EloBadgeHtml(elo) {
+            let c = "elo-grey";
+            if (elo >= 30000) c = "elo-gold";
+            else if (elo >= 25000) c = "elo-red";
+            else if (elo >= 20000) c = "elo-pink";
+            else if (elo >= 15000) c = "elo-purple";
+            else if (elo >= 10000) c = "elo-blue";
+            else if (elo >= 5000) c = "elo-cyan";
+            return `<span class="elo-badge ${c}">${elo.toLocaleString()} ELO</span>`;
+        }
+
+        async function updateProfileHeader() {
+            const res = await fetch(`/api/users/${uid}`);
+            if (res.ok) {
+                const u = await res.json();
+                localStorage.setItem('user_elo', u.elo);
+                document.getElementById('user-elo-container').innerHTML = getCS2EloBadgeHtml(u.elo);
+            }
+        }
+        updateProfileHeader();
+
+        function openMyProfile() { window.location.href = `/profile/${uid}`; }
+        function toggleBotSettings() { document.getElementById('bot-settings').style.display = document.getElementById('game-mode').value === 'bot' ? 'flex' : 'none'; }
+
+        async function searchUsers() {
+            const q = document.getElementById('search-input').value.trim();
+            const resBox = document.getElementById('search-results');
+            if (!q) { resBox.innerHTML = ''; return; }
+            const res = await fetch(`/api/users/search/${q}`);
+            if (res.ok) {
+                const users = await res.json();
+                resBox.innerHTML = '';
+                users.forEach(u => {
+                    const div = document.createElement('div');
+                    div.classList.add('user-result');
+                    div.innerHTML = `<span>${u.username}</span> ${getCS2EloBadgeHtml(u.elo)}`;
+                    div.onclick = () => window.location.href = `/profile/${u.id}`;
+                    resBox.appendChild(div);
+                });
+            }
+        }
+
+        let mmInterval = null, selectedTime = 180;
+        async function startMM(s) {
+            selectedTime = s;
+            document.getElementById('mm-status').style.display = 'block';
+            const res = await fetch('/api/matchmaking/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: parseInt(uid), time_control: s }) });
+            const d = await res.json();
+            if (d.status === 'matched') window.location.href = `/game/${d.game_id}`;
+            else mmInterval = setInterval(checkMM, 2000);
+        }
+        async function checkMM() {
+            const res = await fetch('/api/matchmaking/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: parseInt(uid), time_control: selectedTime }) });
+            const d = await res.json();
+            if (d.status === 'matched') { clearInterval(mmInterval); window.location.href = `/game/${d.game_id}`; }
+        }
+        async function cancelMM() {
+            if (mmInterval) clearInterval(mmInterval);
+            document.getElementById('mm-status').style.display = 'none';
+            await fetch('/api/matchmaking/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: parseInt(uid), time_control: selectedTime }) });
+        }
+
+        async function newGame() {
+            const mode = document.getElementById('game-mode').value;
+            const color = document.getElementById('player-color').value;
+            const elo = parseInt(document.getElementById('bot-elo').value);
+            const res = await fetch('/api/games/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: parseInt(uid), mode, color, elo }) });
+            const d = await res.json();
+            window.location.href = `/game/${d.game_id}`;
+        }
+
+        async function loadGames() {
+            const res = await fetch(`/api/games/list/${uid}`);
+            if (res.ok) {
+                const games = await res.json();
+                const list = document.getElementById('gamelist');
+                list.innerHTML = '';
+                games.forEach(g => {
+                    const div = document.createElement('div');
+                    div.classList.add('user-result');
+                    div.innerHTML = `<span>[${g.mode.toUpperCase()}] ID: ${g.id.substring(0, 6)}</span><span style="font-size:12px;">${g.status}</span>`;
+                    div.onclick = () => window.location.href = g.status === 'active' ? `/game/${g.id}` : `/analysis/${g.id}`;
+                    list.appendChild(div);
+                });
+            }
+        }
+        function logout() { localStorage.clear(); window.location.href = '/'; }
+        loadGames();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HMate - Профиль</title>
+    <link rel="stylesheet" href="/static/glass.css">
+    <style>
+        .profile-card {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .avatar {
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 50%;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .admin-box {
+            display: none;
+            background: rgba(235, 75, 75, 0.15);
+            border: 1px solid rgba(235, 75, 75, 0.4);
+            padding: 12px;
+            border-radius: 10px;
+            margin-top: 10px;
+            flex-direction: column;
+            gap: 8px;
+            text-align: left;
+        }
+
+        .admin-box input {
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #fff;
+            width: 100%;
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="glass-panel profile-card">
+        <div class="avatar" id="avatar-icon">♟️</div>
+        <h2 id="p-username" style="margin:0;">Загрузка...</h2>
+        <div id="p-elo-container"></div>
+
+        <!-- Админ Панель -->
+        <div id="admin-panel" class="admin-box">
+            <span style="font-size: 12px; font-weight: bold; color: #ff6b6b; text-transform: uppercase;">👑 Управление
+                ELO (Админ)</span>
+            <input type="number" id="new-elo-input" placeholder="Введите новый ELO">
+            <button class="glass-btn" style="background: rgba(235, 75, 75, 0.4); color: #fff;"
+                onclick="adminChangeElo()">Сохранить ELO</button>
+        </div>
+
+        <button class="glass-btn" onclick="window.location.href='/dashboard'">В меню</button>
+    </div>
+
+    <script>
+        const myUid = parseInt(localStorage.getItem('user_id'));
+        const pathParts = window.location.pathname.split('/');
+        const targetUserId = parseInt(pathParts[pathParts.length - 1]);
+
+        function getCS2EloBadgeHtml(elo) {
+            let c = "elo-grey";
+            if (elo >= 30000) c = "elo-gold";
+            else if (elo >= 25000) c = "elo-red";
+            else if (elo >= 20000) c = "elo-pink";
+            else if (elo >= 15000) c = "elo-purple";
+            else if (elo >= 10000) c = "elo-blue";
+            else if (elo >= 5000) c = "elo-cyan";
+            return `<span class="elo-badge ${c}">${elo.toLocaleString()} ELO</span>`;
+        }
+
+        async function loadProfile() {
+            const res = await fetch(`/api/users/${targetUserId}`);
+            if (!res.ok) { alert('Пользователь не найден'); window.location.href = '/dashboard'; return; }
+            const targetUser = await res.json();
+
+            document.getElementById('p-username').innerText = targetUser.username;
+            document.getElementById('avatar-icon').innerText = targetUser.username[0].toUpperCase();
+            document.getElementById('p-elo-container').innerHTML = getCS2EloBadgeHtml(targetUser.elo);
+            document.getElementById('new-elo-input').value = targetUser.elo;
+
+            // Проверка: Залогинен ли administrator
+            if (myUid) {
+                const meRes = await fetch(`/api/users/${myUid}`);
+                if (meRes.ok) {
+                    const me = await meRes.json();
+                    if (me.username === 'administrator') {
+                        document.getElementById('admin-panel').style.display = 'flex';
+                    }
+                }
+            }
+        }
+
+        async function adminChangeElo() {
+            const val = parseInt(document.getElementById('new-elo-input').value);
+            if (isNaN(val)) { alert('Введите корректное число'); return; }
+
+            const res = await fetch('/api/admin/set-elo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    admin_id: myUid,
+                    target_user_id: targetUserId,
+                    new_elo: val
+                })
+            });
+
+            if (res.ok) {
+                alert('ELO успешно обновлено!');
+                location.reload();
+            } else {
+                const err = await res.json();
+                alert('Ошибка: ' + (err.detail || 'Не удалось изменить ELO'));
+            }
+        }
+
+        loadProfile();
+    </script>
+</body>
+
+</html>

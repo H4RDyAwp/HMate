@@ -1,0 +1,108 @@
+:root {
+    --glass-bg: rgba(255, 255, 255, 0.07);
+    --glass-border: rgba(255, 255, 255, 0.18);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+    --glass-blur: blur(16px);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background: radial-gradient(circle at 50% 50%, #1a1e29 0%, #0d0f14 100%);
+    color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 10px;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: 16px;
+    padding: 20px;
+    width: 100%;
+    max-width: 480px;
+}
+
+/* CS2 ELO Цвета */
+.elo-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 800;
+    font-size: 13px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: inline-block;
+}
+
+.elo-grey {
+    background: linear-gradient(135deg, #b0c3d9, #4b5463);
+    color: #fff;
+}
+
+.elo-cyan {
+    background: linear-gradient(135deg, #5e98d9, #2b4b73);
+    color: #fff;
+}
+
+.elo-blue {
+    background: linear-gradient(135deg, #4b69ff, #1c2b80);
+    color: #fff;
+}
+
+.elo-purple {
+    background: linear-gradient(135deg, #8847ff, #431c80);
+    color: #fff;
+}
+
+.elo-pink {
+    background: linear-gradient(135deg, #d32ce6, #6b1475);
+    color: #fff;
+}
+
+.elo-red {
+    background: linear-gradient(135deg, #eb4b4b, #781c1c);
+    color: #fff;
+}
+
+.elo-gold {
+    background: linear-gradient(135deg, #ffd700, #b8860b);
+    color: #000;
+}
+
+.glass-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+    touch-action: manipulation;
+}
+
+.glass-btn:active,
+.glass-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+@media (max-width: 500px) {
+    body {
+        padding: 5px;
+    }
+
+    .glass-panel {
+        padding: 14px;
+        border-radius: 12px;
+    }
+}

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HMate - Анализ партии</title>
+    <link rel="stylesheet" href="/static/glass.css">
+    <style>
+        .analysis-layout {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            max-width: 440px;
+        }
+
+        .board-container {
+            width: 100%;
+            aspect-ratio: 1;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            position: relative;
+        }
+
+        .square {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .light {
+            background: #eeeed2;
+        }
+
+        .dark {
+            background: #739552;
+        }
+
+        .piece {
+            width: 100%;
+            height: 100%;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            position: absolute;
+        }
+
+        .moves-box {
+            width: 100%;
+            height: 100px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-content: flex-start;
+        }
+
+        .move-pill {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .move-pill:hover,
+        .move-pill.active {
+            background: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .move-icon {
+            width: 14px;
+            height: 14px;
+            background-size: contain;
+            background-repeat: no-repeat;
+        }
+
+        .controls {
+            width: 100%;
+            display: flex;
+            gap: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="analysis-layout">
+        <h2>Анализ партии 📊</h2>
+
+        <div class="board-container" id="chessboard"></div>
+
+        <div class="moves-box" id="moves-container">
+            <span style="color:#aaa; font-size:13px;">Загрузка анализа Stockfish...</span>
+        </div>
+
+        <div class="controls">
+            <button class="glass-btn" style="flex:1;" onclick="prevMove()">⬅️ Назад</button>
+            <button class="glass-btn" style="flex:1;" onclick="nextMove()">Вперед ➡️</button>
+            <button class="glass-btn" style="flex:1; background:#769656;" onclick="window.location.href='/dashboard'">В
+                меню</button>
+        </div>
+    </div>
+
+    <script>
+        const gameId = window.location.pathname.split('/')[2];
+        const boardEl = document.getElementById('chessboard');
+        let analysisSteps = [];
+        let currentStepIndex = -1;
+
+        const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+        const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+        const pieceImages = {
+            'r': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/br.png',
+            'n': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bn.png',
+            'b': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bb.png',
+            'q': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bq.png',
+            'k': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bk.png',
+            'p': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/bp.png',
+            'R': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wr.png',
+            'N': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wn.png',
+            'B': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wb.png',
+            'Q': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wq.png',
+            'K': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wk.png',
+            'P': 'https://images.chesscomfiles.com/chess-themes/pieces/classic/150/wp.png'
+        };
+
+        function createBoardStatic() {
+            boardEl.innerHTML = '';
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const sq = document.createElement('div');
+                    sq.classList.add('square', (r + c) % 2 === 0 ? 'light' : 'dark');
+                    sq.id = `an-sq-${files[c]}${ranks[r]}`;
+                    boardEl.appendChild(sq);
+                }
+            }
+        }
+
+        function renderFen(fen) {
+            document.querySelectorAll('.square').forEach(sq => sq.innerHTML = '');
+            const fenBoard = fen.split(' ')[0];
+            let r = 0, f = 0;
+            for (let char of fenBoard) {
+                if (char === '/') { r++; f = 0; }
+                else if (!isNaN(char)) { f += parseInt(char); }
+                else {
+                    const sqName = files[f] + ranks[r];
+                    const sqEl = document.getElementById(`an-sq-${sqName}`);
+                    if (sqEl) {
+                        const piece = document.createElement('div');
+                        piece.classList.add('piece');
+                        piece.style.backgroundImage = `url('${pieceImages[char]}')`;
+                        sqEl.appendChild(piece);
+                    }
+                    f++;
+                }
+            }
+        }
+
+        async function loadAnalysis() {
+            createBoardStatic();
+            try {
+                const res = await fetch(`/api/games/${gameId}/full-analysis`);
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                analysisSteps = data.steps;
+
+                if (analysisSteps.length === 0) {
+                    document.getElementById('moves-container').innerHTML = '<span>В этой партии еще не было ходов.</span>';
+                    renderFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+                    return;
+                }
+
+                const container = document.getElementById('moves-container');
+                container.innerHTML = '';
+
+                analysisSteps.forEach((step, idx) => {
+                    const pill = document.createElement('div');
+                    pill.classList.add('move-pill');
+                    pill.id = `move-pill-${idx}`;
+                    pill.innerHTML = `<span>${idx + 1}. ${step.san}</span> <div class="move-icon" style="background-image: url('${step.icon}')"></div>`;
+                    pill.onclick = () => goToStep(idx);
+                    container.appendChild(pill);
+                });
+
+                // Переходим к концу партии по умолчанию
+                goToStep(analysisSteps.length - 1);
+            } catch (e) {
+                document.getElementById('moves-container').innerHTML = '<span style="color:#ff6b6b;">Ошибка загрузки анализа. Убедитесь, что Stockfish установлен.</span>';
+            }
+        }
+
+        function goToStep(idx) {
+            if (idx < -1 || idx >= analysisSteps.length) return;
+            currentStepIndex = idx;
+
+            // Подсветка активного хода в списке
+            document.querySelectorAll('.move-pill').forEach((p, i) => {
+                if (i === idx) p.classList.add('active');
+                else p.classList.remove('active');
+            });
+
+            if (idx === -1) {
+                renderFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+            } else {
+                renderFen(analysisSteps[idx].fen_after);
+            }
+        }
+
+        function nextMove() {
+            if (currentStepIndex < analysisSteps.length - 1) {
+                goToStep(currentStepIndex + 1);
+            }
+        }
+
+        function prevMove() {
+            if (currentStepIndex > -1) {
+                goToStep(currentStepIndex - 1);
+            }
+        }
+
+        loadAnalysis();
+    </script>
+</body>
+
+</html>
