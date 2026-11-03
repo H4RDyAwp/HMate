@@ -10,7 +10,6 @@ pydantic-core
 aiosqlite
 bcrypt 
 psycopg_binary  
-libpq
 psycopg
 greenlet
 python-jose
