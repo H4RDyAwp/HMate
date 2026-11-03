@@ -11,6 +11,7 @@ aiosqlite
 bcrypt 
 psycopg_binary  
 psycopg
+psycopg2
 greenlet
 python-jose
 asyncpg>=0.29.0
