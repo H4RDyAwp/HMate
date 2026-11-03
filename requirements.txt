@@ -13,3 +13,4 @@ psycopg_binary
 psycopg
 greenlet
 python-jose
+psycopg2
