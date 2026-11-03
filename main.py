@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import String, Text, ForeignKey, Integer, select, desc, or_
 
-DATABASE_URL = "postgresql://root:nnQFWohevFfVx8jGwWqEynZffuxykhOf@dpg-dbl0tebm8hqs738qj3eg-a.oregon-postgres.render.com/hmate"
+DATABASE_URL = "postgresql+asyncpg://root:nnQFWohevFfVx8jGwWqEynZffuxykhOf@dpg-dbl0tebm8hqs738qj3eg-a.oregon-postgres.render.com/hmate"
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(engine, expire_on_commit=False)
