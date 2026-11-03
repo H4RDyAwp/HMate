@@ -6,3 +6,10 @@ aiosqlite==0.20.0
 chess==1.10.0
 bcrypt==4.1.2
 requests==2.31.0
+pydantic-core
+aiosqlite
+bcrypt 
+psycopg_binary  
+psycopg
+greenlet
+python-jose
