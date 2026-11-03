@@ -14,3 +14,4 @@ psycopg
 greenlet
 python-jose
 psycopg2
+asyncpg>=0.29.0
